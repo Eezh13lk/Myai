@@ -29,7 +29,7 @@
   #status {
     padding: 10px 16px; font-size: 13px; color: #9a9a9a;
     background: #17181a; border-bottom: 1px solid #26272b;
-    min-height: 20px;
+    min-height: 20px; word-break: break-word;
   }
   #bar {
     height: 4px; background: #26272b; overflow: hidden; display: none;
@@ -74,13 +74,13 @@
   <button id="clear">New chat</button>
 </header>
 
-<div id="status">Tap "Load model" to start (once, ~230 MB).</div>
+<div id="status">Starting...</div>
 <div id="bar"><div id="barFill"></div></div>
 
 <div id="messages">
   <div class="msg sys">
-    This is your offline AI. First load downloads the model — keep screen on.
-    After that, works with no internet.
+    This is your offline AI. First load downloads the model (about 250 MB) — keep screen on.
+    After that, it works with no internet.
   </div>
 </div>
 
@@ -95,7 +95,8 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-const MODEL_ID = 'onnx-community/SmolLM2-360M-Instruct';
+// FIXED MODEL ID — this one is public, no auth needed
+const MODEL_ID = 'Xenova/SmolLM2-360M-Instruct';
 const SYSTEM = 'You are a helpful, friendly AI assistant. Answer clearly and briefly.';
 
 const statusEl = document.getElementById('status');
@@ -249,4 +250,256 @@ loadModel();
 </script>
 
 </body>
-  </html>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#17181a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>My AI</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #0f0f10; color: #ececec;
+    display: flex; flex-direction: column; height: 100dvh;
+  }
+  header {
+    background: #17181a; border-bottom: 1px solid #26272b;
+    padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  header button {
+    background: #26272b; color: #ececec; border: none;
+    padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  #status {
+    padding: 10px 16px; font-size: 13px; color: #9a9a9a;
+    background: #17181a; border-bottom: 1px solid #26272b;
+    min-height: 20px; word-break: break-word;
+  }
+  #bar {
+    height: 4px; background: #26272b; overflow: hidden; display: none;
+  }
+  #bar.on { display: block; }
+  #barFill { height: 100%; background: #2563eb; width: 0%; transition: width 0.2s; }
+  #messages {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg {
+    max-width: 88%; padding: 10px 14px; border-radius: 16px;
+    line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; font-size: 15px;
+  }
+  .user { align-self: flex-end; background: #2563eb; color: #fff; border-bottom-right-radius: 4px; }
+  .ai { align-self: flex-start; background: #26272b; border-bottom-left-radius: 4px; }
+  .sys { align-self: center; background: transparent; color: #7a7a7a; font-size: 13px; text-align: center; }
+  .cursor::after { content: "▋"; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  footer {
+    padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: #17181a; border-top: 1px solid #26272b;
+    display: flex; gap: 8px;
+  }
+  #input {
+    flex: 1; background: #0f0f10; color: #ececec; border: 1px solid #2f3034;
+    border-radius: 12px; padding: 12px 14px; font-size: 16px;
+    font-family: inherit; outline: none; resize: none; max-height: 120px;
+  }
+  #input:disabled { opacity: 0.5; }
+  #send {
+    background: #2563eb; color: white; border: none;
+    border-radius: 12px; padding: 0 18px; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  #send:disabled { opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>My AI</h1>
+  <button id="clear">New chat</button>
+</header>
+
+<div id="status">Starting...</div>
+<div id="bar"><div id="barFill"></div></div>
+
+<div id="messages">
+  <div class="msg sys">
+    This is your offline AI. First load downloads the model (about 250 MB) — keep screen on.
+    After that, it works with no internet.
+  </div>
+</div>
+
+<footer>
+  <textarea id="input" rows="1" placeholder="Message..." disabled></textarea>
+  <button id="send" disabled>Send</button>
+</footer>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
+// FIXED MODEL ID — this one is public, no auth needed
+const MODEL_ID = 'Xenova/SmolLM2-360M-Instruct';
+const SYSTEM = 'You are a helpful, friendly AI assistant. Answer clearly and briefly.';
+
+const statusEl = document.getElementById('status');
+const barEl = document.getElementById('bar');
+const barFill = document.getElementById('barFill');
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+const clearBtn = document.getElementById('clear');
+
+let pipe = null;
+let history = [];
+let busy = false;
+let wakeLock = null;
+let fileProgress = {};
+
+function setStatus(t) { statusEl.textContent = t; }
+function setBar(pct) {
+  if (pct === undefined) { barEl.classList.remove('on'); return; }
+  barEl.classList.add('on');
+  barFill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+async function lockScreen() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) {}
+}
+async function unlockScreen() {
+  if (wakeLock) { try { await wakeLock.release(); } catch(e){} wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !pipe && !wakeLock) lockScreen();
+});
+
+function addMsg(text, who) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = text;
+  messagesEl.appendChild(d);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return d;
+}
+
+function onProgress(x) {
+  if (x.status === 'progress' && x.file) {
+    const fp = fileProgress[x.file] || (fileProgress[x.file] = { loaded: 0, total: 0 });
+    fp.loaded = x.loaded || 0;
+    fp.total = x.total || fp.total || 0;
+    let l = 0, t = 0;
+    for (const k in fileProgress) { l += fileProgress[k].loaded; t += fileProgress[k].total; }
+    if (t > 0) {
+      setBar((l/t) * 100);
+      setStatus('Downloading... ' + (l/1048576).toFixed(1) + ' / ' + (t/1048576).toFixed(1) + ' MB — keep screen on');
+    } else {
+      setStatus('Downloading ' + x.file + '...');
+    }
+  } else if (x.status === 'ready') {
+    setBar(100);
+  }
+}
+
+async function loadModel() {
+  if (pipe || busy) return;
+  setStatus('Checking cache...');
+  await lockScreen();
+
+  try {
+    const hasGPU = !!navigator.gpu;
+    const device = hasGPU ? 'webgpu' : 'wasm';
+    setStatus('Loading on ' + device.toUpperCase() + '...');
+
+    pipe = await pipeline('text-generation', MODEL_ID, {
+      dtype: 'q4',
+      device: device,
+      progress_callback: onProgress
+    });
+
+    setStatus('Ready. Works offline now.');
+    setBar(undefined);
+    inputEl.disabled = false;
+    sendBtn.disabled = false;
+    inputEl.focus();
+    addMsg('Model loaded. You can chat now.', 'sys');
+  } catch (err) {
+    console.error(err);
+    setStatus('Failed: ' + err.message + ' — reload page to retry');
+  }
+  await unlockScreen();
+}
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text || busy || !pipe) return;
+
+  busy = true;
+  sendBtn.disabled = true;
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+
+  addMsg(text, 'user');
+  history.push({ role: 'user', content: text });
+
+  const aiEl = addMsg('', 'ai');
+  aiEl.classList.add('cursor');
+
+  try {
+    const out = await pipe(history, {
+      max_new_tokens: 256, temperature: 0.7,
+      do_sample: true, repetition_penalty: 1.1
+    });
+    let reply = '';
+    const gen = out && out[0] && out[0].generated_text;
+    if (Array.isArray(gen)) {
+      const last = gen[gen.length - 1];
+      reply = (last && last.content) || '';
+      history = gen.slice();
+    } else if (typeof gen === 'string') {
+      reply = gen;
+      history.push({ role: 'assistant', content: reply });
+    }
+    aiEl.textContent = reply || '(no reply)';
+  } catch (err) {
+    aiEl.textContent = 'Error: ' + err.message;
+  }
+  aiEl.classList.remove('cursor');
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  busy = false;
+  sendBtn.disabled = false;
+  inputEl.focus();
+}
+
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+});
+clearBtn.addEventListener('click', () => {
+  history = [];
+  messagesEl.innerHTML = '';
+  addMsg('New chat.', 'sys');
+});
+
+// Auto-start loading when page opens
+loadModel();
+</script>
+
+</body>
+</html>
