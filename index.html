@@ -96,7 +96,6 @@
   <select id="modelSel">
     <option value="smol" selected>SmolLM2 360M — fast, ~230 MB</option>
     <option value="qwen">Qwen2.5 0.5B — balanced, ~400 MB</option>
-    <option value="qwen15">Qwen2.5 1.5B — best quality, ~1 GB</option>
   </select>
   <button id="load">Load model</button>
 </div>
@@ -122,9 +121,8 @@ env.allowLocalModels = false;
 env.useBrowserCache = true;
 
 const MODELS = {
-  smol:   { id: 'HuggingFaceTB/SmolLM2-360M-Instruct',  label: 'SmolLM2 360M' },
-  qwen:   { id: 'onnx-community/Qwen2.5-0.5B-Instruct', label: 'Qwen2.5 0.5B' },
-  qwen15: { id: 'onnx-community/Qwen2.5-1.5B-Instruct', label: 'Qwen2.5 1.5B' }
+  smol: { id: 'HuggingFaceTB/SmolLM2-360M-Instruct',  label: 'SmolLM2 360M' },
+  qwen: { id: 'onnx-community/Qwen2.5-0.5B-Instruct', label: 'Qwen2.5 0.5B' }
 };
 
 const SYSTEM = 'You are a helpful, friendly AI assistant. Answer clearly and briefly.';
@@ -194,6 +192,23 @@ function onProgress(x) {
   }
 }
 
+// *** REAL WebGPU CHECK: actually try to get an adapter ***
+async function pickDevice() {
+  try {
+    if (navigator.gpu) {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        // Also try to request a device to be sure
+        const device = await adapter.requestDevice();
+        if (device) return 'webgpu';
+      }
+    }
+  } catch (e) {
+    console.warn('WebGPU not usable:', e);
+  }
+  return 'wasm';
+}
+
 async function loadModel() {
   if (busy) return;
   busy = true;
@@ -205,11 +220,12 @@ async function loadModel() {
   for (const k in fileProgress) delete fileProgress[k];
 
   const info = MODELS[modelSel.value];
-  const hasGPU = !!navigator.gpu;
-  const device = hasGPU ? 'webgpu' : 'wasm';
+
+  setStatus('Checking device...');
+  const device = await pickDevice();
 
   await lockScreen();
-  setStatus('Loading ' + info.label + ' on ' + device.toUpperCase() + '...');
+  setStatus('Loading ' + info.label + ' on ' + device.toUpperCase() + ' (this may take a few minutes)...');
 
   try {
     pipe = await pipeline('text-generation', info.id, {
@@ -218,7 +234,7 @@ async function loadModel() {
       progress_callback: onProgress
     });
 
-    setStatus(info.label + ' ready. Works offline now.');
+    setStatus(info.label + ' ready on ' + device.toUpperCase() + '. Works offline now.');
     setBar(undefined);
     setupEl.classList.add('hidden');
     inputEl.disabled = false;
@@ -227,7 +243,7 @@ async function loadModel() {
     addMsg('Model loaded: ' + info.label + ' (' + device.toUpperCase() + ').', 'sys');
   } catch (err) {
     console.error(err);
-    setStatus('Failed: ' + err.message + ' — reload page and pick a smaller model');
+    setStatus('Failed: ' + err.message);
     loadBtn.disabled = false;
     modelSel.disabled = false;
   }
@@ -245,16 +261,14 @@ async function send() {
   inputEl.style.height = 'auto';
 
   addMsg(text, 'user');
-  history.push({ role: 'system', content: SYSTEM });
-  history.pop(); // ensure no duplicate system
-  history.unshift({ role: 'system', content: SYSTEM });
+  history.push({ role: 'user', content: text });
 
   const aiEl = addMsg('', 'ai');
   aiEl.classList.add('cursor');
 
   try {
     const out = await pipe(history, {
-      max_new_tokens: 256, temperature: 0.7,
+      max_new_tokens: 200, temperature: 0.7,
       do_sample: true, repetition_penalty: 1.1
     });
     let reply = '';
@@ -295,4 +309,4 @@ clearBtn.addEventListener('click', () => {
 </script>
 
 </body>
-</html>
+ </html>
