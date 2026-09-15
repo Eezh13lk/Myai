@@ -26,6 +26,23 @@
     background: #26272b; color: #ececec; border: none;
     padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
   }
+  #setup {
+    padding: 14px 16px; background: #17181a;
+    border-bottom: 1px solid #26272b; flex-shrink: 0;
+  }
+  #setup.hidden { display: none; }
+  #setup label { display: block; font-size: 12px; color: #9a9a9a; margin-bottom: 6px; }
+  #setup select {
+    width: 100%; background: #0f0f10; color: #ececec;
+    border: 1px solid #2f3034; border-radius: 8px;
+    padding: 12px; font-size: 15px; font-family: inherit; margin-bottom: 10px;
+  }
+  #load {
+    width: 100%; background: #2563eb; color: #fff; border: none;
+    padding: 12px; border-radius: 8px; font-size: 15px;
+    font-weight: 600; cursor: pointer;
+  }
+  #load:disabled { opacity: 0.5; }
   #status {
     padding: 10px 16px; font-size: 13px; color: #9a9a9a;
     background: #17181a; border-bottom: 1px solid #26272b;
@@ -74,13 +91,22 @@
   <button id="clear">New chat</button>
 </header>
 
-<div id="status">Starting...</div>
+<div id="setup">
+  <label>Choose a model (first load downloads it once)</label>
+  <select id="modelSel">
+    <option value="smol" selected>SmolLM2 360M — fast, ~230 MB</option>
+    <option value="qwen">Qwen2.5 0.5B — balanced, ~400 MB</option>
+    <option value="qwen15">Qwen2.5 1.5B — best quality, ~1 GB</option>
+  </select>
+  <button id="load">Load model</button>
+</div>
+
+<div id="status">Pick a model and tap Load.</div>
 <div id="bar"><div id="barFill"></div></div>
 
 <div id="messages">
   <div class="msg sys">
-    This is your offline AI. First load downloads the model (about 250 MB) — keep screen on.
-    After that, it works with no internet.
+    First load downloads the model. Keep the screen on. After that, works offline.
   </div>
 </div>
 
@@ -95,13 +121,20 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
-// FIXED MODEL ID — this is the official, public version of the model
-const MODEL_ID = 'HuggingFaceTB/SmolLM2-360M-Instruct';
+const MODELS = {
+  smol:   { id: 'HuggingFaceTB/SmolLM2-360M-Instruct',  label: 'SmolLM2 360M' },
+  qwen:   { id: 'onnx-community/Qwen2.5-0.5B-Instruct', label: 'Qwen2.5 0.5B' },
+  qwen15: { id: 'onnx-community/Qwen2.5-1.5B-Instruct', label: 'Qwen2.5 1.5B' }
+};
+
 const SYSTEM = 'You are a helpful, friendly AI assistant. Answer clearly and briefly.';
 
 const statusEl = document.getElementById('status');
 const barEl = document.getElementById('bar');
 const barFill = document.getElementById('barFill');
+const setupEl = document.getElementById('setup');
+const modelSel = document.getElementById('modelSel');
+const loadBtn = document.getElementById('load');
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('send');
@@ -162,32 +195,44 @@ function onProgress(x) {
 }
 
 async function loadModel() {
-  if (pipe || busy) return;
-  setStatus('Checking cache...');
+  if (busy) return;
+  busy = true;
+  loadBtn.disabled = true;
+  modelSel.disabled = true;
+  inputEl.disabled = true;
+  sendBtn.disabled = true;
+
+  for (const k in fileProgress) delete fileProgress[k];
+
+  const info = MODELS[modelSel.value];
+  const hasGPU = !!navigator.gpu;
+  const device = hasGPU ? 'webgpu' : 'wasm';
+
   await lockScreen();
+  setStatus('Loading ' + info.label + ' on ' + device.toUpperCase() + '...');
 
   try {
-    const hasGPU = !!navigator.gpu;
-    const device = hasGPU ? 'webgpu' : 'wasm';
-    setStatus('Loading on ' + device.toUpperCase() + '...');
-
-    pipe = await pipeline('text-generation', MODEL_ID, {
+    pipe = await pipeline('text-generation', info.id, {
       dtype: 'q4',
       device: device,
       progress_callback: onProgress
     });
 
-    setStatus('Ready. Works offline now.');
+    setStatus(info.label + ' ready. Works offline now.');
     setBar(undefined);
+    setupEl.classList.add('hidden');
     inputEl.disabled = false;
     sendBtn.disabled = false;
     inputEl.focus();
-    addMsg('Model loaded. You can chat now.', 'sys');
+    addMsg('Model loaded: ' + info.label + ' (' + device.toUpperCase() + ').', 'sys');
   } catch (err) {
     console.error(err);
-    setStatus('Failed: ' + err.message + ' — reload page to retry');
+    setStatus('Failed: ' + err.message + ' — reload page and pick a smaller model');
+    loadBtn.disabled = false;
+    modelSel.disabled = false;
   }
   await unlockScreen();
+  busy = false;
 }
 
 async function send() {
@@ -200,7 +245,9 @@ async function send() {
   inputEl.style.height = 'auto';
 
   addMsg(text, 'user');
-  history.push({ role: 'user', content: text });
+  history.push({ role: 'system', content: SYSTEM });
+  history.pop(); // ensure no duplicate system
+  history.unshift({ role: 'system', content: SYSTEM });
 
   const aiEl = addMsg('', 'ai');
   aiEl.classList.add('cursor');
@@ -231,6 +278,7 @@ async function send() {
   inputEl.focus();
 }
 
+loadBtn.addEventListener('click', loadModel);
 sendBtn.addEventListener('click', send);
 inputEl.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -244,9 +292,6 @@ clearBtn.addEventListener('click', () => {
   messagesEl.innerHTML = '';
   addMsg('New chat.', 'sys');
 });
-
-// Auto-start loading when page opens
-loadModel();
 </script>
 
 </body>
